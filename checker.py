@@ -71,7 +71,7 @@ def console_report():
         # Walk through all services
         for s in services_list:
             # Check if Enterprise Tier, and it's running
-            if s["sku"]["tier"] == "Enterprise" and s["properties"]["powerState"] == "Running":
+            if s["sku"]["tier"] == "Enterprise" and s["properties"]["provisioningState"] == "Succeeded":
                 # If so, add to the list
                 services.append(s["name"])
                 print("  {}".format(s["name"]))
