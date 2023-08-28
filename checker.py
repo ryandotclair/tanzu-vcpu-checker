@@ -21,16 +21,16 @@ args = Parser.parse_args()
 def azure_auth():
     # This function returns the bearer token that's used in follow up API calls
     try:
-        url = "https://login.microsoftonline.com/{}/oauth2/token".format(directory_id)
+        url = f"https://login.microsoftonline.com/{directory_id}/oauth2/token"
 
-        payload = "grant_type=client_credentials&client_id={}&client_secret={}&resource=https%3A%2F%2Fmanagement.azure.com%2F".format(app_id,app_value_id)
+        payload = f"grant_type=client_credentials&client_id={app_id}&client_secret={app_value_id}&resource=https%3A%2F%2Fmanagement.azure.com%2F"
 
         headers = {
         'Content-Type': 'application/x-www-form-urlencoded'
         }
 
         response = requests.request("POST", url, headers=headers, data=payload)
-        logging.debug("response from azure_auth function: {}".format(response))
+        logging.debug(f"response from azure_auth function: {response}")
 
         bearer_token = response.json()["access_token"]
 
@@ -45,7 +45,7 @@ def console_report():
     # This function generates a report, written to the console
 
     # Grab all RG's in Subscription
-    rg_url = "https://management.azure.com/subscriptions/{}/resourcegroups?api-version=2021-04-01".format(subscription)
+    rg_url = f"https://management.azure.com/subscriptions/{subscription}/resourcegroups?api-version=2021-04-01"
     response = requests.get(rg_url, headers=headers)
     rg_list = response.json()["value"]
     rgs = []
@@ -54,31 +54,31 @@ def console_report():
     print("RGs Discovered...")
     for r in rg_list:
         rgs.append(r["name"])
-        print("  {}".format(r["name"]))
+        print(f'  {r["name"]}')
 
     print(" ")
     for rg in rgs:
         rTotalCPU = 0
-        services_url = "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.AppPlatform/Spring?api-version=2023-05-01-preview".format(subscription,rg)
+        services_url = f"https://management.azure.com/subscriptions/{subscription}/resourceGroups/{rg}/providers/Microsoft.AppPlatform/Spring?api-version=2023-05-01-preview"
         response = requests.get(services_url, headers=headers)
         services_list = response.json()["value"]
         services = []
         if len(services_list) > 0:
-            print("ASA-E Instances Discovered in RG {}...".format(rg))
+            print(f"ASA-E Instances Discovered in RG {rg}...")
         else:
-            print("None found in RG {}".format(rg))
+            print(f"None found in RG {rg}")
             continue
         # Walk through all services
         for s in services_list:
             # Check if Enterprise Tier, and it's running
-            if s["sku"]["tier"] == "Enterprise" and s["properties"]["provisioningState"] == "Succeeded":
+            if s["sku"]["tier"] == "Enterprise" and s["properties"]["powerState"] == "Running":
                 # If so, add to the list
                 services.append(s["name"])
-                print("  {}".format(s["name"]))
+                print(f"  {s['name']}")
         # Walk through each ASA-E Instance and grab app list
         for service in services:
             try:
-                apps_url = "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.AppPlatform/Spring/{}/apps?api-version=2023-05-01-preview".format(subscription,rg,service)
+                apps_url = f"https://management.azure.com/subscriptions/{subscription}/resourceGroups/{rg}/providers/Microsoft.AppPlatform/Spring/{service}/apps?api-version=2023-05-01-preview"
                 response = requests.get(apps_url, headers=headers)
                 apps_list = response.json()["value"]
                 apps = []
@@ -88,19 +88,19 @@ def console_report():
                         apps.append(a["name"])
             except Exception as e:
                 # In event of an error, note it
-                print("!!! Error: RG {} | Service {} | Error {}".format(rg,service,e))
+                print(f"!!! Error: RG {rg} | Service {service} | Error {e}")
                 continue
             sTotalCPU = 0
             print(" ")
-            print("Service {}...".format(service))
+            print(f"Service {service}...")
             # For each app in the service, grab the active deployment's infra needs
             for app in apps:
-                deployments_url = "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.AppPlatform/Spring/{}/apps/{}/deployments?api-version=2023-05-01-preview".format(subscription, rg, service, app)
+                deployments_url = f"https://management.azure.com/subscriptions/{subscription}/resourceGroups/{rg}/providers/Microsoft.AppPlatform/Spring/{service}/apps/{app}/deployments?api-version=2023-05-01-preview"
                 try:
                     response = requests.get(deployments_url, headers=headers,timeout=20)
                 except requests.exceptions.Timeout:
                     # Assume after 20 seconds it's "hung", note the failure and skip
-                    print("!!RG {} | App: {} | Active deployment: {} | TIMEOUT ERROR".format(rg,app,deployment["name"]))
+                    print(f"!!RG {rg} | App: {app} | Active deployment: {deployment['name']} | TIMEOUT ERROR")
                     continue
                 deployments = response.json()["value"]
                 for deployment in deployments:
@@ -113,22 +113,22 @@ def console_report():
                         total = int(cpu) * capacity
                         sTotalCPU += total
                         active_deployment_name = deployment["name"]
-                        print("  RG {} | App: {} | Active deployment: {} | vCPUs {}".format(rg,app,active_deployment_name,total))
-            print("Service {} | Total vCPUs {}".format(service,sTotalCPU))
+                        print(f"  RG {rg} | App: {app} | Active deployment: {active_deployment_name} | vCPUs {total}")
+            print(f"Service {service} | Total vCPUs {sTotalCPU}")
             print(" ")
             rTotalCPU += sTotalCPU
-        print("RG {} | Total CPUs {}".format(rg, rTotalCPU))
+        print(f"RG {rg} | Total CPUs {rTotalCPU}")
         print(" ")
         TotalCPU += rTotalCPU
     print(" ")
-    print("Subscription {} | Total vCPUs Found {}".format(subscription, TotalCPU))
+    print(f"Subscription {subscription} | Total vCPUs Found {TotalCPU}")
 
 def csv_format():
     # This function print out either to console or to straight to file a report using Comma-Separated Values format with this column header:
     # Timestamp, Resource Group, Instance Name, App Name, Active Deployment, Total vCPUs
 
     # Grab all RG's in Subscription
-    rg_url = "https://management.azure.com/subscriptions/{}/resourcegroups?api-version=2021-04-01".format(subscription)
+    rg_url = f"https://management.azure.com/subscriptions/{subscription}/resourcegroups?api-version=2021-04-01"
     response = requests.get(rg_url, headers=headers)
     rg_list = response.json()["value"]
     rgs = []
@@ -147,7 +147,7 @@ def csv_format():
     for rg in rgs:
         # For each RG, look for ASA-E instances
         rTotalCPU = 0
-        services_url = "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.AppPlatform/Spring?api-version=2023-05-01-preview".format(subscription,rg)
+        services_url = f"https://management.azure.com/subscriptions/{subscription}/resourceGroups/{rg}/providers/Microsoft.AppPlatform/Spring?api-version=2023-05-01-preview"
         response = requests.get(services_url, headers=headers)
         services_list = response.json()["value"]
         services = []
@@ -165,7 +165,7 @@ def csv_format():
         # Walk through each powered on ASA-E Instance and grab app names.
         for service in services:
             try:
-                apps_url = "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.AppPlatform/Spring/{}/apps?api-version=2023-05-01-preview".format(subscription,rg,service)
+                apps_url = f"https://management.azure.com/subscriptions/{subscription}/resourceGroups/{rg}/providers/Microsoft.AppPlatform/Spring/{service}/apps?api-version=2023-05-01-preview"
                 response = requests.get(apps_url, headers=headers)
                 apps_list = response.json()["value"]
                 apps = []
@@ -175,17 +175,17 @@ def csv_format():
                         apps.append(a["name"])
             except Exception as e:
                 # In event of an error, note it
-                print("!!! Error: RG {} | Service {} | Error {}".format(rg,service,e))
+                print(f"!!! Error: RG {rg} | Service {service} | Error {e}")
                 continue
             sTotalCPU = 0
             # For each powered on app in the service, look at it's deployments.
             for app in apps:
-                deployments_url = "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.AppPlatform/Spring/{}/apps/{}/deployments?api-version=2023-05-01-preview".format(subscription, rg, service, app)
+                deployments_url = f"https://management.azure.com/subscriptions/{subscription}/resourceGroups/{rg}/providers/Microsoft.AppPlatform/Spring/{service}/apps/{app}/deployments?api-version=2023-05-01-preview"
                 try:
                     response = requests.get(deployments_url, headers=headers,timeout=20)
                 except requests.exceptions.Timeout:
                     # Assuming 20 seconds has passed and it's still hanging, assume an issue, note the failure and skip
-                    print("{}, {}, {}, {}, TIMEOUT ERROR".format(rg,service,app,deployment["name"]))
+                    print(f"{rg}, {service}, {app}, {deployment['name']}, TIMEOUT ERROR")
                     continue
                 deployments = response.json()["value"]
 
@@ -207,7 +207,7 @@ def csv_format():
                             rows.append([now,rg,service,app,active_deployment_name,total])
                         else:
                             # Otherwise print it to console
-                            print("{}, {}, {}, {}, {}, {}".format(now,rg,service,app,active_deployment_name,total))
+                            print(f"{now}, {rg}, {service}, {app}, {active_deployment_name}, {total}")
             # Add the Service's total to the RG's total
             rTotalCPU += sTotalCPU
         # Add RG's total to the Subscription's Total
@@ -226,7 +226,7 @@ def csv_format():
         print("Done")
     # If it's not to disk, then print totals to screen
     else:
-        print("Subscription {} | Total vCPUs Found {}".format(subscription, TotalCPU))
+        print(f"Subscription {subscription} | Total vCPUs Found {TotalCPU}")
 
 # Grab Authorization Token (to be used in the functions below)
 azure_token = azure_auth()
