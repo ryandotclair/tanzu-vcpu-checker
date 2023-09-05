@@ -93,19 +93,19 @@ def console_report():
             sTotalCPU = 0
             print(" ")
             print(f"Service {service}...")
-            # For each app in the service, grab the active deployment's infra needs
+            # For each app in the service, grab the deployment's infra needs
             for app in apps:
                 deployments_url = f"https://management.azure.com/subscriptions/{subscription}/resourceGroups/{rg}/providers/Microsoft.AppPlatform/Spring/{service}/apps/{app}/deployments?api-version=2023-05-01-preview"
                 try:
                     response = requests.get(deployments_url, headers=headers,timeout=20)
                 except requests.exceptions.Timeout:
                     # Assume after 20 seconds it's "hung", note the failure and skip
-                    print(f"!!RG {rg} | App: {app} | Active deployment: {deployment['name']} | TIMEOUT ERROR")
+                    print(f"!!RG {rg} | App: {app} | Deployment: {deployment['name']} | TIMEOUT ERROR")
                     continue
                 deployments = response.json()["value"]
                 for deployment in deployments:
-                    # Grab the active deployment's infra needs IF the app is running.
-                    if deployment["properties"]["active"] and deployment["properties"]["status"] == "Running":
+                    # Grab the deployment's infra needs IF the app is running.
+                    if deployment["properties"]["status"] == "Running":
                         cpu = deployment["properties"]["deploymentSettings"]["resourceRequests"]["cpu"]
                         capacity = deployment["sku"]["capacity"]
 
@@ -113,7 +113,7 @@ def console_report():
                         total = int(cpu) * capacity
                         sTotalCPU += total
                         active_deployment_name = deployment["name"]
-                        print(f"  RG {rg} | App: {app} | Active deployment: {active_deployment_name} | vCPUs {total}")
+                        print(f"  RG {rg} | App: {app} | Deployment: {active_deployment_name} | vCPUs {total}")
             print(f"Service {service} | Total vCPUs {sTotalCPU}")
             print(" ")
             rTotalCPU += sTotalCPU
@@ -125,7 +125,7 @@ def console_report():
 
 def csv_format():
     # This function print out either to console or to straight to file a report using Comma-Separated Values format with this column header:
-    # Timestamp, Resource Group, Instance Name, App Name, Active Deployment, Total vCPUs
+    # Timestamp, Resource Group, Instance Name, App Name, Deployment Name, Total vCPUs
 
     # Grab all RG's in Subscription
     rg_url = f"https://management.azure.com/subscriptions/{subscription}/resourcegroups?api-version=2021-04-01"
@@ -142,7 +142,7 @@ def csv_format():
 
     if not args.file:
         # If this isn't straight to file, print headers to screen
-        print("Timestamp, Resource Group, Instance Name, App Name, Active Deployment, Total vCPUs")
+        print("Timestamp, Resource Group, Instance Name, App Name, Deployment, Total vCPUs")
 
     for rg in rgs:
         # For each RG, look for ASA-E instances
@@ -191,8 +191,8 @@ def csv_format():
 
                 # Walk through each deployment in the app...
                 for deployment in deployments:
-                    # And grab the active deployment's infra needs if the app is powered on and running.
-                    if deployment["properties"]["active"] and deployment["properties"]["status"] == "Running":
+                    # And grab the deployment's infra needs if the app is powered on and running.
+                    if deployment["properties"]["status"] == "Running":
                         cpu = deployment["properties"]["deploymentSettings"]["resourceRequests"]["cpu"]
                         capacity = deployment["sku"]["capacity"]
 
@@ -216,7 +216,7 @@ def csv_format():
 
     # If this is a csv -f situation, write to disk
     if args.file:
-        df = pd.DataFrame(data=rows, columns = ['Timestamp', 'Resource Group', 'Service Name', 'App Name', 'Active Deployment Name', 'Total vCPUs'])
+        df = pd.DataFrame(data=rows, columns = ['Timestamp', 'Resource Group', 'Service Name', 'App Name', 'Deployment Name', 'Total vCPUs'])
 
         # If the file already exists, append without headers, otherwise with headers
         if os.path.isfile('vcpu_report.csv'):
